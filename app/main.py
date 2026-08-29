@@ -1,7 +1,10 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers import players
+from app.init_db import run_db_init
 
 app = FastAPI(
     title="Football Talent AI — API",
@@ -19,6 +22,18 @@ app.add_middleware(
 )
 
 app.include_router(players.router)
+
+
+@app.on_event("startup")
+def on_startup():
+    """
+    Carga el esquema de base de datos automáticamente si aún no existe.
+    Permite desplegar sin ejecutar psql manualmente.
+    """
+    try:
+        run_db_init()
+    except Exception:
+        logging.exception("No se pudo inicializar la base de datos automáticamente")
 
 
 @app.get("/health")
