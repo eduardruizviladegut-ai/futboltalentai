@@ -26,15 +26,30 @@ from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_excep
 
 BASE_URL = "https://www.sofascore.com/api/v1"
 
+# Cabeceras completas imitando un navegador real. El impersonate="chrome124"
+# ya iguala el fingerprint TLS/HTTP2, pero Cloudflare también evalúa el
+# conjunto de cabeceras HTTP -- un Referer/Accept-Language ausente es
+# una señal de bot fácil de detectar.
+DEFAULT_HEADERS = {
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.sofascore.com/",
+    "Origin": "https://www.sofascore.com",
+    "Sec-Fetch-Site": "same-origin",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Dest": "empty",
+}
+
 
 class SofascoreRateLimitError(Exception):
     pass
 
 
 class SofascoreClient:
-    def __init__(self, min_delay: float = 1.5, max_delay: float = 3.5):
+    def __init__(self, min_delay: float = 2.5, max_delay: float = 5.0):
         self.min_delay = min_delay
         self.max_delay = max_delay
+        self.session = curl_requests.Session(impersonate="chrome124", headers=DEFAULT_HEADERS)
 
     def _sleep(self):
         time.sleep(random.uniform(self.min_delay, self.max_delay))
@@ -46,7 +61,7 @@ class SofascoreClient:
     )
     def _get(self, path: str) -> dict:
         url = f"{BASE_URL}/{path.lstrip('/')}"
-        response = curl_requests.get(url, impersonate="chrome124", timeout=20)
+        response = self.session.get(url, timeout=20)
 
         if response.status_code == 429:
             raise SofascoreRateLimitError(f"Rate limited en {path}")
@@ -54,6 +69,19 @@ class SofascoreClient:
 
         self._sleep()
         return response.json()
+
+    def warm_up(self) -> None:
+        """
+        Visita la home de Sofascore primero, para que la sesión reciba
+        las cookies (ej. cf_clearance) que Cloudflare exige antes de
+        aceptar peticiones a /api/v1/... Reduce (no elimina) el riesgo
+        de 403 en la primera petición a la API.
+        """
+        try:
+            self.session.get("https://www.sofascore.com/", timeout=20)
+            self._sleep()
+        except Exception:
+            pass  # si falla el warm-up, seguimos igual con los reintentos normales
 
     # ------------------------------------------------------------------
     # Endpoints usados por la ingesta v1

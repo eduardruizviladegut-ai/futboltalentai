@@ -148,6 +148,7 @@ def get_or_create_player(db: Session, source: DS, player_data: dict, team: Team)
 
 def run():
     client = SofascoreClient()
+    client.warm_up()
     db = SessionLocal()
 
     try:
