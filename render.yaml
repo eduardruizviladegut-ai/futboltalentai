@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: football-talent-ai-api
+    runtime: python
+    plan: free
+    branch: main
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: football-talent-ai-db
+          property: connectionString
+      - key: ENVIRONMENT
+        value: production
+
+databases:
+  - name: football-talent-ai-db
+    plan: free
+    databaseName: football_talent_ai
+    user: football_talent_ai
